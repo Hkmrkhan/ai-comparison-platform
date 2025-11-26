@@ -1,264 +1,572 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { AIService, type ModelResponse } from '@/lib/ai-service';
-import { AI_MODELS, type AIModel } from '@/lib/ai-models';
+import { supabase } from '@/lib/supabase';
+
+interface Model {
+  id: string;
+  name: string;
+  label: string;
+  description: string;
+  provider: string;
+}
+
+interface APIKeys {
+  [provider: string]: string;
+}
+
+interface ModelResponse {
+  model: string;
+  provider: string;
+  response: string;
+  time: number;
+  wordCount: number;
+  success: boolean;
+}
+
+interface UserData {
+  id: string;
+  email?: string;
+  user_metadata?: {
+    first_name?: string;
+    last_name?: string;
+    full_name?: string;
+  };
+}
+
+const AVAILABLE_MODELS: Model[] = [
+  {
+    id: '1',
+    name: 'llama-3.3-70b-versatile',
+    label: 'Llama 3.3 70B',
+    description: 'Latest flagship - Best for complex tasks',
+    provider: 'groq'
+  },
+  {
+    id: '2',
+    name: 'llama-3.1-8b-instant',
+    label: 'Llama 3.1 8B',
+    description: 'Speed champion - 560 tokens/sec',
+    provider: 'groq'
+  },
+  {
+    id: '3',
+    name: 'qwen/qwen3-32b',
+    label: 'Qwen 3 32B',
+    description: 'Alibaba Cloud model - 400 tokens/sec',
+    provider: 'groq'
+  },
+  {
+    id: '4',
+    name: 'gpt-5',
+    label: 'GPT-5',
+    description: 'Latest OpenAI flagship model',
+    provider: 'openai'
+  },
+  {
+    id: '5',
+    name: 'gpt-4.1',
+    label: 'GPT-4.1',
+    description: 'Advanced reasoning model',
+    provider: 'openai'
+  },
+  {
+    id: '6',
+    name: 'gemini-2.5-flash',
+    label: 'Gemini 2.5 Flash',
+    description: 'Latest stable - Fast & efficient',
+    provider: 'google'
+  },
+  {
+    id: '7',
+    name: 'gemini-2.5-pro',
+    label: 'Gemini 2.5 Pro',
+    description: 'Most capable Gemini model',
+    provider: 'google'
+  },
+  {
+    id: '8',
+    name: 'claude-opus-4-1-20250805',
+    label: 'Claude Opus 4.1',
+    description: 'Most intelligent Claude model - Aug 2025',
+    provider: 'anthropic'
+  },
+  {
+    id: '9',
+    name: 'claude-sonnet-4-5-20250929',
+    label: 'Claude Sonnet 4.5',
+    description: 'Latest Claude model - Sep 2025',
+    provider: 'anthropic'
+  }
+];
 
 export default function ComparePage() {
-  const [selectedModels, setSelectedModels] = useState<string[]>([]);
-  const [prompt, setPrompt] = useState('');
-  const [results, setResults] = useState<ModelResponse[]>([]);
-  const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const [user, setUser] = useState<UserData | null>(null);
+  const [selectedModels, setSelectedModels] = useState<Model[]>([]);
+  const [apiKeys, setApiKeys] = useState<APIKeys>({});
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [showAddModelsModal, setShowAddModelsModal] = useState(false);
+  const [prompt, setPrompt] = useState('');
+  const [responses, setResponses] = useState<ModelResponse[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
 
-  const aiService = new AIService();
-
-  const handleModelSelect = (modelId: string, checked: boolean | 'indeterminate'): void => {
-    const isChecked = checked === true;
-    
-    setSelectedModels(prev => {
-      const currentModels = Array.from(new Set(prev));
-      
-      if (isChecked) {
-        if (!currentModels.includes(modelId) && currentModels.length < 3) {
-          return [...currentModels, modelId];
-        }
-        return currentModels;
-      } else {
-        return currentModels.filter(id => id !== modelId);
+  useEffect(() => {
+    const loadUserData = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/auth/login');
+        return;
       }
-    });
+      setUser(user);
+
+      const { data } = await supabase
+        .from('user_preferences')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      // If user hasn't completed onboarding, redirect
+      if (!data || !data.onboarding_completed) {
+        router.push('/onboarding');
+        return;
+      }
+
+      setSelectedModels(data.selected_models || []);
+      setApiKeys(data.api_keys || {});
+    };
+
+    loadUserData();
+  }, [router]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/auth/login');
   };
 
-  const handleCompare = async (): Promise<void> => {
-    const uniqueModels = Array.from(new Set(selectedModels));
-    
-    if (uniqueModels.length === 0) {
-      alert('Please select at least one model');
+  const handleSaveApiKeys = async () => {
+    if (!user) return;
+
+    const { error } = await supabase
+      .from('user_preferences')
+      .update({ api_keys: apiKeys })
+      .eq('user_id', user.id);
+
+    if (!error) {
+      setShowApiKeyModal(false);
+      alert('API Keys saved successfully! ✅');
+    }
+  };
+
+  const toggleModelSelection = (model: Model) => {
+    if (selectedModels.find(m => m.id === model.id)) {
+      setSelectedModels(selectedModels.filter(m => m.id !== model.id));
+    } else if (selectedModels.length < 7) {
+      setSelectedModels([...selectedModels, model]);
+    }
+  };
+
+  const handleSaveSelectedModels = async () => {
+    if (!user) return;
+
+    const { error } = await supabase
+      .from('user_preferences')
+      .update({ selected_models: selectedModels })
+      .eq('user_id', user.id);
+
+    if (!error) {
+      setShowAddModelsModal(false);
+      alert('Models updated successfully! ✅');
+    }
+  };
+
+  const handleCompare = async () => {
+    if (!prompt.trim()) {
+      alert('Please enter a prompt!');
       return;
     }
-    
-    if (!prompt.trim()) {
-      alert('Please enter a prompt');
+
+    // Filter only models that have API keys
+    const modelsWithKeys = selectedModels.filter(
+      model => apiKeys[model.provider]
+    );
+
+    if (modelsWithKeys.length === 0) {
+      alert('Please add API keys for at least one model!');
+      setShowApiKeyModal(true);
       return;
     }
 
     setLoading(true);
-    setResults([]);
-    
+
     try {
-      const comparisonResults = await aiService.compareModels(uniqueModels, prompt);
-      setResults(comparisonResults);
+      const results = await Promise.allSettled(
+        modelsWithKeys.map(async (model) => {
+          const startTime = performance.now();
+          
+          const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: model.name,
+              prompt,
+              provider: model.provider,
+              apiKey: apiKeys[model.provider]
+            })
+          });
+
+          const data = await response.json();
+          const endTime = performance.now();
+
+          return {
+            model: model.label,
+            provider: model.provider,
+            response: data.response || data.error || 'No response',
+            time: Math.round(endTime - startTime),
+            wordCount: data.response ? data.response.split(/\s+/).length : 0,
+            success: !data.error
+          };
+        })
+      );
+
+      const formattedResponses = results.map((result): ModelResponse => {
+        if (result.status === 'fulfilled') {
+          return result.value;
+        }
+        return {
+          model: 'Unknown',
+          provider: 'unknown',
+          response: 'Request failed',
+          time: 0,
+          wordCount: 0,
+          success: false
+        };
+      });
+
+      setResponses(formattedResponses);
     } catch (error) {
-      console.error('Comparison failed:', error);
-      alert('Comparison failed. Please try again.');
-    } finally {
-      setLoading(false);
+      console.error('Error:', error);
+      alert('An error occurred during comparison');
     }
+
+    setLoading(false);
   };
 
-  // ✅ NEW: Cancel button handler
-  const handleCancel = () => {
-    setPrompt('');
-    setResults([]);
+  const handleCopy = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(id);
+    setTimeout(() => setCopied(null), 2000);
   };
 
-  const uniqueSelectedModels = Array.from(new Set(selectedModels));
+  const getUniqueProviders = () => {
+    const providers = new Set(selectedModels.map(m => m.provider));
+    return Array.from(providers);
+  };
+
+  // Count how many models have API keys
+  const modelsWithApiKeys = selectedModels.filter(m => apiKeys[m.provider]).length;
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+        <div className="text-white">Loading...</div>
+      </div>
+    );
+  }
+
+  const userName = user.user_metadata?.first_name || user.email?.split('@')[0] || 'User';
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="container mx-auto px-4 max-w-6xl">
-        {/* ✅ NEW: Back Button */}
-        <div className="mb-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-3 sm:p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header - Responsive */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
+          <div>
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white">
+              AI Model Comparison
+            </h1>
+            <p className="text-slate-400 mt-1 sm:mt-2 text-sm sm:text-base">
+              Welcome, {userName}! 👋
+            </p>
+          </div>
           <button
-            onClick={() => router.push('/dashboard')}
-            className="flex items-center text-gray-600 hover:text-gray-900 font-medium transition-colors"
+            onClick={handleLogout}
+            className="w-full sm:w-auto px-4 sm:px-6 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition text-sm sm:text-base"
           >
-            <svg 
-              className="w-5 h-5 mr-2" 
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
-            >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M15 19l-7-7 7-7" 
-              />
-            </svg>
-            Back to Dashboard
+            Logout
           </button>
         </div>
 
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Compare AI Models</h1>
-          <p className="text-gray-600">Enter a prompt and select models to compare</p>
+        {/* Action Buttons - Responsive */}
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-6">
+          <button
+            onClick={() => setShowAddModelsModal(true)}
+            className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition flex items-center justify-center gap-2 text-sm sm:text-base"
+          >
+            Add Models
+          </button>
+          <button
+            onClick={() => setShowApiKeyModal(true)}
+            className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition flex items-center justify-center gap-2 text-sm sm:text-base"
+          >
+            Manage API Keys
+          </button>
         </div>
-        
-        <div className="grid md:grid-cols-2 gap-8 mb-8">
-          {/* Model Selection */}
-          <div className="bg-white rounded-lg p-6 shadow-sm border">
-            <h2 className="text-xl font-semibold mb-4">Select AI Models</h2>
-            <p className="text-gray-600 text-sm mb-4">
-              Choose which models to compare (select 2-3 models)
+
+        {/* Selected Models - Responsive Grid */}
+        <div className="bg-slate-800 rounded-lg p-4 sm:p-6 mb-6 border border-slate-700">
+          <h3 className="text-lg sm:text-xl font-bold text-white mb-4">
+            Your Selected Models ({selectedModels.length})
+            {selectedModels.length > 0 && (
+              <span className="text-xs sm:text-sm font-normal text-slate-400 ml-2 sm:ml-3">
+                ({modelsWithApiKeys} with API keys)
+              </span>
+            )}
+          </h3>
+          {selectedModels.length === 0 ? (
+            <p className="text-slate-400 text-sm sm:text-base">
+              No models selected. Click "Add Models" to get started.
             </p>
-            
-            <div className="space-y-3">
-              {AI_MODELS.map((model: AIModel) => {
-                const isSelected = uniqueSelectedModels.includes(model.id);
-                const isDisabled = !isSelected && uniqueSelectedModels.length >= 3;
-                
-                return (
-                  <div 
-                    key={`model-${model.id}`}
-                    className={`flex items-start space-x-3 p-3 rounded-lg border transition-all ${
-                      isSelected 
-                        ? 'bg-blue-50 border-blue-300' 
-                        : 'bg-white border-gray-200 hover:border-gray-300'
-                    } ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                    onClick={() => {
-                      if (!isDisabled) {
-                        handleModelSelect(model.id, !isSelected);
-                      }
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      id={`checkbox-${model.id}`}
-                      className="mt-1 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
-                      checked={isSelected}
-                      disabled={isDisabled}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        handleModelSelect(model.id, e.target.checked);
-                      }}
-                    />
-                    <label htmlFor={`checkbox-${model.id}`} className="flex-1 cursor-pointer">
-                      <div className="font-medium text-gray-900">{model.name}</div>
-                      <div className="text-sm text-gray-500">{model.description}</div>
-                    </label>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Selected count indicator */}
-            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-800">
-                {uniqueSelectedModels.length === 0 ? (
-                  '❌ No models selected'
-                ) : (
-                  <>
-                    ✅ Selected: {uniqueSelectedModels.length} model{uniqueSelectedModels.length !== 1 ? 's' : ''}
-                    {uniqueSelectedModels.length >= 3 && ' (Maximum reached)'}
-                  </>
-                )}
-              </p>
-              {uniqueSelectedModels.length > 0 && (
-                <div className="mt-2 text-xs text-blue-700 space-y-1">
-                  {uniqueSelectedModels.map((id, index) => {
-                    const model = AI_MODELS.find(m => m.id === id);
-                    return (
-                      <div key={`selected-list-${id}`}>
-                        {index + 1}. {model?.name || id}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Prompt Input */}
-          <div className="bg-white rounded-lg p-6 shadow-sm border">
-            <h2 className="text-xl font-semibold mb-4">Enter Your Prompt</h2>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="What is artificial intelligence?"
-              className="w-full h-32 p-3 border border-gray-300 rounded-md resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-            />
-            
-            {/* ✅ UPDATED: Compare & Cancel Buttons */}
-            <div className="flex gap-3 mt-4">
-              <button
-                onClick={handleCompare}
-                disabled={loading || uniqueSelectedModels.length === 0 || !prompt.trim()}
-                className="flex-1 bg-black hover:bg-gray-800 text-white py-3 px-6 rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? '🔄 Comparing Models...' : 'Compare Models'}
-              </button>
-
-              {/* ✅ NEW: Cancel Button - Only show if there's text or results */}
-              {(prompt.trim() || results.length > 0) && (
-                <button
-                  onClick={handleCancel}
-                  disabled={loading}
-                  className="px-6 py-3 border-2 border-gray-300 hover:border-red-500 text-gray-700 hover:text-red-600 rounded-md font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {selectedModels.map((model) => (
+                <div
+                  key={model.id}
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-slate-700 p-3 sm:p-4 rounded-lg gap-2"
                 >
-                  Cancel
-                </button>
-              )}
+                  <div className="flex-1">
+                    <div className="text-white font-semibold text-sm sm:text-base">
+                      {model.label}
+                    </div>
+                    <div className="text-slate-400 text-xs sm:text-sm">
+                      {model.description}
+                    </div>
+                  </div>
+                  <div className={`text-xs sm:text-sm font-semibold ${apiKeys[model.provider] ? 'text-green-400' : 'text-red-400'}`}>
+                    {apiKeys[model.provider] ? '✓ API Key Set' : '✗ No API Key'}
+                  </div>
+                </div>
+              ))}
             </div>
-            
-            {uniqueSelectedModels.length === 0 && (
-              <p className="text-sm text-amber-600 mt-2">
-                ⚠️ Please select at least one model to continue
-              </p>
-            )}
-            
-            {!prompt.trim() && uniqueSelectedModels.length > 0 && (
-              <p className="text-sm text-amber-600 mt-2">
-                ⚠️ Please enter a prompt to continue
-              </p>
-            )}
-          </div>
+          )}
         </div>
 
-        {/* Results Section */}
-        {results.length > 0 && (
-          <div>
-            <h2 className="text-2xl font-semibold mb-6">Comparison Results</h2>
-            
-            <div className="grid md:grid-cols-2 gap-6">
-              {results.map((result: ModelResponse, index: number) => {
-                const modelInfo = AI_MODELS.find((m: AIModel) => m.id === result.model);
-                return (
-                  <div key={`result-${result.model}-${index}`} className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {modelInfo?.name || result.model}
-                      </h3>
-                      <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                        {result.responseTime}ms
-                      </span>
-                    </div>
-                    
-                    <div className="prose prose-sm max-w-none mb-4">
-                      <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                        {result.response}
-                      </p>
-                    </div>
-                    
-                    <div className="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-100">
-                      <div>
-                        {result.success ? (
-                          <span className="text-green-600 font-medium">✅ Success</span>
-                        ) : (
-                          <span className="text-red-600 font-medium">❌ Error</span>
-                        )}
-                      </div>
-                      <span>{result.wordCount} words</span>
-                    </div>
+        {/* Prompt Input - Responsive */}
+        <div className="bg-slate-800 rounded-lg p-4 sm:p-6 mb-6 border border-slate-700">
+          <label className="block text-white font-semibold mb-3 text-sm sm:text-base">
+            Enter Your Prompt:
+          </label>
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Type your question or prompt here..."
+            className="w-full h-24 sm:h-32 bg-slate-700 border border-slate-600 rounded-lg px-3 sm:px-4 py-2 sm:py-3 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm sm:text-base"
+          />
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mt-4">
+            <button
+              onClick={handleCompare}
+              disabled={loading || !prompt.trim() || modelsWithApiKeys === 0}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold py-2 sm:py-3 px-4 sm:px-6 rounded-lg flex items-center justify-center gap-2 text-sm sm:text-base"
+            >
+              {loading ? (
+                <>
+                  <svg className="animate-spin h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 24 24">
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      fill="none"
+                      strokeDasharray="60"
+                    />
+                  </svg>
+                  Comparing...
+                </>
+              ) : (
+                '⚡ Compare Models'
+              )}
+            </button>
+            {prompt && (
+              <button
+                onClick={() => {
+                  setPrompt('');
+                  setResponses([]);
+                }}
+                className="sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg text-sm sm:text-base"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+          {modelsWithApiKeys === 0 && selectedModels.length > 0 && (
+            <p className="text-yellow-400 text-xs sm:text-sm mt-3">
+              ⚠️ Please add API keys for at least one model to start comparison
+            </p>
+          )}
+        </div>
+
+        {/* Results - Responsive */}
+        {responses.length > 0 && (
+          <div className="space-y-4">
+            {responses.map((response, idx) => (
+              <div
+                key={idx}
+                className={`bg-slate-800 rounded-lg p-4 sm:p-6 border-2 ${
+                  response.success ? 'border-green-700' : 'border-red-700'
+                }`}
+              >
+                <div className="flex flex-col sm:flex-row justify-between items-start gap-3 sm:gap-4 mb-4">
+                  <div>
+                    <h3 className="text-lg sm:text-xl font-bold text-white">
+                      {response.model}
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-400">
+                      {response.provider}
+                    </p>
                   </div>
-                );
-              })}
-            </div>
+                  <button
+                    onClick={() => handleCopy(response.response, `response-${idx}`)}
+                    className={`w-full sm:w-auto px-3 sm:px-4 py-2 rounded-lg transition text-sm ${
+                      copied === `response-${idx}`
+                        ? 'bg-green-600 text-white'
+                        : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                    }`}
+                  >
+                    {copied === `response-${idx}` ? '✓ Copied!' : ' Copy'}
+                  </button>
+                </div>
+                <p className="text-slate-300 mb-4 leading-relaxed whitespace-pre-wrap text-sm sm:text-base break-words">
+                  {response.response}
+                </p>
+                <div className="flex flex-wrap gap-3 sm:gap-6 text-xs sm:text-sm text-slate-400">
+                  <span> {response.time}ms</span>
+                  <span> {response.wordCount} words</span>
+                  <span className={response.success ? 'text-green-400' : 'text-red-400'}>
+                    {response.success ? '✓ Success' : '✗ Failed'}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
+
+      {/* Add Models Modal - Responsive */}
+      {showAddModelsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-lg p-4 sm:p-8 max-w-4xl w-full mx-4 border border-slate-700 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6">
+              Add Models ({selectedModels.length}/7)
+            </h2>
+            
+            <div className="grid grid-cols-1 gap-3 sm:gap-4 mb-4 sm:mb-6">
+              {AVAILABLE_MODELS.map((model) => {
+                const isSelected = selectedModels.find(m => m.id === model.id);
+                const isDisabled = selectedModels.length >= 7 && !isSelected;
+
+                return (
+                  <div
+                    key={model.id}
+                    onClick={() => !isDisabled && toggleModelSelection(model)}
+                    className={`p-3 sm:p-4 rounded-lg border-2 cursor-pointer transition ${
+                      isSelected
+                        ? 'border-blue-500 bg-blue-900 bg-opacity-30'
+                        : 'border-slate-600 bg-slate-700 hover:border-slate-500'
+                    } ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={!!isSelected}
+                        readOnly
+                        className="mt-1"
+                        disabled={isDisabled}
+                      />
+                      <div className="flex-1">
+                        <div className="font-bold text-white text-base sm:text-lg mb-1">
+                          {model.label}
+                        </div>
+                        <div className="text-slate-400 text-xs sm:text-sm">
+                          {model.description}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+              <button
+                onClick={handleSaveSelectedModels}
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 sm:py-3 rounded-lg text-sm sm:text-base"
+              >
+                Save Selected Models
+              </button>
+              <button
+                onClick={() => setShowAddModelsModal(false)}
+                className="sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg text-sm sm:text-base"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* API Key Modal - Responsive */}
+      {showApiKeyModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-lg p-4 sm:p-8 max-w-2xl w-full mx-4 border border-slate-700 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6">
+               Manage API Keys
+            </h2>
+            
+            <div className="space-y-3 sm:space-y-4 mb-4 sm:mb-6">
+              {getUniqueProviders().map((provider) => (
+                <div key={provider}>
+                  <label className="block text-white font-semibold mb-2 capitalize text-sm sm:text-base">
+                    {provider} API Key:
+                  </label>
+                  <input
+                    type="password"
+                    value={apiKeys[provider] || ''}
+                    onChange={(e) =>
+                      setApiKeys({ ...apiKeys, [provider]: e.target.value })
+                    }
+                    placeholder={`Enter your ${provider} API key`}
+                    className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm sm:text-base"
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-yellow-900 border border-yellow-700 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6">
+              <p className="text-yellow-100 text-xs sm:text-sm">
+                <strong>Security:</strong> Your API keys are stored securely in our database and only accessible by you.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+              <button
+                onClick={handleSaveApiKeys}
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 sm:py-3 rounded-lg text-sm sm:text-base"
+              >
+                Save API Keys
+              </button>
+              <button
+                onClick={() => setShowApiKeyModal(false)}
+                className="sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg text-sm sm:text-base"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
