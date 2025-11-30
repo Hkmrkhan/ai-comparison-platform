@@ -1,5 +1,4 @@
 'use client';
-
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -101,6 +100,13 @@ const AVAILABLE_MODELS: Model[] = [
   }
 ];
 
+interface PromptHistory {
+  id: string;
+  prompt: string;
+  responses: ModelResponse[];
+  created_at: string;
+}
+
 export default function ComparePage() {
   const router = useRouter();
   const [user, setUser] = useState<UserData | null>(null);
@@ -108,10 +114,13 @@ export default function ComparePage() {
   const [apiKeys, setApiKeys] = useState<APIKeys>({});
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [showAddModelsModal, setShowAddModelsModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [responses, setResponses] = useState<ModelResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [promptHistory, setPromptHistory] = useState<PromptHistory[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -136,6 +145,9 @@ export default function ComparePage() {
 
       setSelectedModels(data.selected_models || []);
       setApiKeys(data.api_keys || {});
+
+      // Load prompt history
+      await loadPromptHistory(user.id);
     };
 
     loadUserData();
@@ -144,6 +156,71 @@ export default function ComparePage() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push('/auth/login');
+  };
+
+  const loadPromptHistory = async (userId: string) => {
+    setLoadingHistory(true);
+    try {
+      const { data, error } = await supabase
+        .from('prompt_history')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (!error && data) {
+        setPromptHistory(data);
+      }
+    } catch (error) {
+      console.error('Error loading prompt history:', error);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const savePromptHistory = async (prompt: string, responses: ModelResponse[]) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('prompt_history')
+        .insert({
+          user_id: user.id,
+          prompt,
+          responses
+        });
+
+      if (!error) {
+        // Reload history after saving
+        await loadPromptHistory(user.id);
+      }
+    } catch (error) {
+      console.error('Error saving prompt history:', error);
+    }
+  };
+
+  const loadHistoryItem = (historyItem: PromptHistory) => {
+    setPrompt(historyItem.prompt);
+    setResponses(historyItem.responses);
+    setShowHistoryModal(false);
+  };
+
+  const deleteHistoryItem = async (historyId: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('prompt_history')
+        .delete()
+        .eq('id', historyId)
+        .eq('user_id', user.id);
+
+      if (!error) {
+        await loadPromptHistory(user.id);
+      }
+    } catch (error) {
+      console.error('Error deleting prompt history:', error);
+    }
   };
 
   const handleSaveApiKeys = async () => {
@@ -246,6 +323,9 @@ export default function ComparePage() {
       });
 
       setResponses(formattedResponses);
+
+      // Save prompt history to database
+      await savePromptHistory(prompt, formattedResponses);
     } catch (error) {
       console.error('Error:', error);
       alert('An error occurred during comparison');
@@ -313,6 +393,12 @@ export default function ComparePage() {
           >
             Manage API Keys
           </button>
+          <button
+            onClick={() => setShowHistoryModal(true)}
+            className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition flex items-center justify-center gap-2 text-sm sm:text-base"
+          >
+            📜 History ({promptHistory.length})
+          </button>
         </div>
 
         {/* Selected Models - Responsive Grid */}
@@ -327,7 +413,7 @@ export default function ComparePage() {
           </h3>
           {selectedModels.length === 0 ? (
             <p className="text-slate-400 text-sm sm:text-base">
-              No models selected. Click "Add Models" to get started.
+              No models selected. Click &quot;Add Models&quot; to get started.
             </p>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -562,6 +648,93 @@ export default function ComparePage() {
                 className="sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg text-sm sm:text-base"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* History Modal - Responsive */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-lg p-4 sm:p-8 max-w-4xl w-full mx-4 border border-slate-700 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6">
+              📜 Prompt History ({promptHistory.length})
+            </h2>
+            
+            {loadingHistory ? (
+              <div className="text-center py-8">
+                <div className="text-white">Loading history...</div>
+              </div>
+            ) : promptHistory.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-slate-400 text-sm sm:text-base">
+                  No prompt history yet. Start comparing AI models to build your history!
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3 sm:space-y-4 mb-4 sm:mb-6">
+                {promptHistory.map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-3 sm:p-4 rounded-lg bg-slate-700 hover:bg-slate-650 border border-slate-600 transition"
+                  >
+                    <div className="flex flex-col sm:flex-row justify-between items-start gap-3 mb-3">
+                      <div className="flex-1">
+                        <p className="text-white font-medium text-sm sm:text-base mb-1">
+                          {item.prompt.length > 100 ? `${item.prompt.substring(0, 100)}...` : item.prompt}
+                        </p>
+                        <p className="text-slate-400 text-xs sm:text-sm">
+                          {new Date(item.created_at).toLocaleString()} • {item.responses.length} models
+                        </p>
+                      </div>
+                      <div className="flex gap-2 w-full sm:w-auto">
+                        <button
+                          onClick={() => loadHistoryItem(item)}
+                          className="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs sm:text-sm font-semibold transition"
+                        >
+                          📂 Load
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm('Delete this prompt history?')) {
+                              deleteHistoryItem(item.id);
+                            }
+                          }}
+                          className="px-3 sm:px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs sm:text-sm font-semibold transition"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* Preview of responses */}
+                    <div className="mt-3 pt-3 border-t border-slate-600">
+                      <p className="text-slate-400 text-xs mb-2">Responses:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {item.responses.map((resp, idx) => (
+                          <span
+                            key={idx}
+                            className={`text-xs px-2 py-1 rounded ${
+                              resp.success ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200'
+                            }`}
+                          >
+                            {resp.model} ({resp.time}ms)
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowHistoryModal(false)}
+                className="px-4 sm:px-6 py-2 sm:py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg text-sm sm:text-base"
+              >
+                Close
               </button>
             </div>
           </div>
