@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { authenticatedFetch } from '@/lib/api-helpers';
 
 interface Model {
   id: string;
@@ -147,7 +148,7 @@ export default function ComparePage() {
       setApiKeys(data.api_keys || {});
 
       // Load prompt history
-      await loadPromptHistory(user.id);
+      await loadPromptHistory();
     };
 
     loadUserData();
@@ -158,18 +159,16 @@ export default function ComparePage() {
     router.push('/auth/login');
   };
 
-  const loadPromptHistory = async (userId: string) => {
+  const loadPromptHistory = async () => {
     setLoadingHistory(true);
     try {
-      const { data, error } = await supabase
-        .from('prompt_history')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(20);
+      const response = await authenticatedFetch('/api/history', {
+        method: 'GET'
+      });
 
-      if (!error && data) {
-        setPromptHistory(data);
+      if (response.ok) {
+        const { history } = await response.json();
+        setPromptHistory(history);
       }
     } catch (error) {
       console.error('Error loading prompt history:', error);
@@ -182,17 +181,17 @@ export default function ComparePage() {
     if (!user) return;
 
     try {
-      const { error } = await supabase
-        .from('prompt_history')
-        .insert({
-          user_id: user.id,
+      const response = await authenticatedFetch('/api/history', {
+        method: 'POST',
+        body: JSON.stringify({
           prompt,
           responses
-        });
+        })
+      });
 
-      if (!error) {
+      if (response.ok) {
         // Reload history after saving
-        await loadPromptHistory(user.id);
+        await loadPromptHistory();
       }
     } catch (error) {
       console.error('Error saving prompt history:', error);
@@ -209,17 +208,21 @@ export default function ComparePage() {
     if (!user) return;
 
     try {
-      const { error } = await supabase
-        .from('prompt_history')
-        .delete()
-        .eq('id', historyId)
-        .eq('user_id', user.id);
+      const response = await authenticatedFetch(`/api/history/${historyId}`, {
+        method: 'DELETE'
+      });
 
-      if (!error) {
-        await loadPromptHistory(user.id);
+      if (response.ok) {
+        await loadPromptHistory();
+        console.log('✅ History deleted successfully');
+      } else {
+        const error = await response.json();
+        console.error('❌ Delete failed:', error);
+        alert('Failed to delete history: ' + (error.error || 'Unknown error'));
       }
     } catch (error) {
       console.error('Error deleting prompt history:', error);
+      alert('Error deleting history. Please try again.');
     }
   };
 
@@ -326,6 +329,9 @@ export default function ComparePage() {
 
       // Save prompt history to database
       await savePromptHistory(prompt, formattedResponses);
+
+      // Clear the prompt input field after successful comparison
+      setPrompt('');
     } catch (error) {
       console.error('Error:', error);
       alert('An error occurred during comparison');
