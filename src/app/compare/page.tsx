@@ -594,9 +594,10 @@ export default function ComparePage() {
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <button
                 onClick={handleSaveSelectedModels}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 sm:py-3 rounded-lg text-sm sm:text-base"
+                disabled={selectedModels.length < 2}
+                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold py-2 sm:py-3 rounded-lg text-sm sm:text-base"
               >
-                Save Selected Models
+                Save Selected Models {selectedModels.length < 2 && `(${selectedModels.length}/2 minimum)`}
               </button>
               <button
                 onClick={() => setShowAddModelsModal(false)}
@@ -645,7 +646,8 @@ export default function ComparePage() {
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <button
                 onClick={handleSaveApiKeys}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 sm:py-3 rounded-lg text-sm sm:text-base"
+                disabled={Object.values(apiKeys).every(key => !key || key.trim() === '')}
+                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold py-2 sm:py-3 rounded-lg text-sm sm:text-base"
               >
                 Save API Keys
               </button>
