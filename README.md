@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Comparison Platform
 
-## Getting Started
+A Next.js + Supabase application to compare multiple AI models side by side with a single prompt, including per-user prompt history.
 
-First, run the development server:
+## Quick Start
+
+1. Install dependencies
+
+```bash
+npm install
+```
+
+2. Configure environment variables in `.env.local`
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_SITE_URL` (recommended, used in password reset redirects)
+
+3. Run required SQL migration in Supabase
+
+- Execute `supabase-migration-prompt-history.sql`
+
+4. Start dev server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+5. Open app
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `http://localhost:3000`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Core Features
 
-## Learn More
+- Authentication (signup/login/reset/update password)
+- Onboarding to select preferred AI models
+- API key management per provider
+- Multi-model parallel comparison
+- Prompt history save/load/delete
 
-To learn more about Next.js, take a look at the following resources:
+## Project Documentation
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Architecture + flow + maintenance guide: `PROJECT_GUIDE.md`
+- API flow visual notes: `API_FLOW_DIAGRAM.md`
+- History API implementation notes: `API_HISTORY_IMPLEMENTATION.md`
+- History setup quick start: `QUICK_START_HISTORY.md`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Main App Routes
 
-## Deploy on Vercel
+- `/` landing
+- `/auth/login`
+- `/auth/signup`
+- `/auth/reset-password`
+- `/auth/update-password`
+- `/onboarding`
+- `/compare`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Scripts
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `npm run dev` - start development server
+- `npm run build` - production build
+- `npm run start` - run production server
+- `npm run lint` - lint codebase
