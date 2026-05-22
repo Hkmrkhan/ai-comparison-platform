@@ -92,24 +92,20 @@ export default function OnboardingPage() {
 
   const dialogues = [
     {
-      title: "Welcome to AI Model Comparison! 👋",
+      title: "Welcome to AI Model Comparison",
       message: "Let's set up your account. First, select the AI models you want to compare.",
-      icon: "🚀"
     },
     {
-      title: "Great Choice! 🎯",
+      title: "Great Choice",
       message: `You've selected ${selectedModels.length} model(s). These models will be available for comparison.`,
-      icon: "✨"
     },
     {
-      title: "Almost Done! 🔑",
+      title: "Almost Done",
       message: "Next, you'll add your API keys for each model on the comparison page.",
-      icon: "🎉"
     },
     {
-      title: "You're All Set! 🎊",
+      title: "You're All Set",
       message: "Click 'Start Comparing' to begin comparing your selected AI models.",
-      icon: "🚀"
     }
   ];
 
@@ -180,16 +176,21 @@ export default function OnboardingPage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900">
-        <div className="text-white">Loading...</div>
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
+        <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 backdrop-blur-xl">
+          Loading...
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
+      <div className="absolute inset-0 subtle-grid opacity-20" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.12),_transparent_34%),radial-gradient(circle_at_bottom_right,_rgba(168,85,247,0.14),_transparent_30%)]" />
+
       {/* Progress Bar - Responsive */}
-      <div className="bg-slate-800 border-b border-slate-700">
+      <div className="relative border-b border-white/10 bg-slate-950/80 backdrop-blur-2xl">
         <div className="max-w-4xl mx-auto px-3 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between gap-2">
             {dialogues.map((_, idx) => (
@@ -197,8 +198,8 @@ export default function OnboardingPage() {
                 <div
                   className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center font-bold text-sm sm:text-base ${
                     idx <= currentStep
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-700 text-slate-400'
+                      ? 'bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-500/20'
+                      : 'border border-white/10 bg-white/5 text-slate-400'
                   }`}
                 >
                   {idx + 1}
@@ -206,7 +207,7 @@ export default function OnboardingPage() {
                 {idx < dialogues.length - 1 && (
                   <div
                     className={`w-8 sm:w-16 h-1 ${
-                      idx < currentStep ? 'bg-blue-600' : 'bg-slate-700'
+                      idx < currentStep ? 'bg-cyan-400' : 'bg-white/10'
                     }`}
                   />
                 )}
@@ -217,24 +218,22 @@ export default function OnboardingPage() {
       </div>
 
       {/* Content - Responsive */}
-      <div className="max-w-4xl mx-auto px-3 sm:px-6 py-6 sm:py-12">
+      <div className="relative max-w-5xl mx-auto px-3 sm:px-6 py-6 sm:py-12">
         {/* Dialogue Box - Responsive */}
-        <div className="bg-gradient-to-r from-blue-900 to-purple-900 rounded-lg p-6 sm:p-8 mb-6 sm:mb-8 text-center border border-blue-700">
-          <div className="text-4xl sm:text-6xl mb-3 sm:mb-4">
-            {dialogues[currentStep].icon}
-          </div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3 sm:mb-4">
+        <div className="glass-panel rounded-[2rem] p-6 sm:p-10 mb-6 sm:mb-8 text-center">
+          <div className="mx-auto mb-4 h-12 w-12 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-100 shadow-lg shadow-cyan-500/10" />
+          <h2 className="text-2xl sm:text-3xl font-semibold text-white mb-3 sm:mb-4">
             {dialogues[currentStep].title}
           </h2>
-          <p className="text-base sm:text-xl text-slate-200">
+          <p className="mx-auto max-w-2xl text-base sm:text-lg text-slate-300">
             {dialogues[currentStep].message}
           </p>
         </div>
 
         {/* Model Selection (Only on Step 0) - Responsive */}
         {currentStep === 0 && (
-          <div className="bg-slate-800 rounded-lg p-4 sm:p-6 border border-slate-700 mb-6 sm:mb-8">
-            <h3 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6">
+          <div className="glass-panel rounded-[2rem] p-4 sm:p-6 mb-6 sm:mb-8">
+            <h3 className="text-xl sm:text-2xl font-semibold text-white mb-4 sm:mb-6">
               Select AI Models ({selectedModels.length}/7)
             </h3>
             <p className="text-slate-300 mb-4 sm:mb-6 text-sm sm:text-base">
@@ -250,10 +249,10 @@ export default function OnboardingPage() {
                   <div
                     key={model.id}
                     onClick={() => !isDisabled && toggleModel(model)}
-                    className={`p-3 sm:p-4 rounded-lg border-2 cursor-pointer transition ${
+                    className={`p-3 sm:p-4 rounded-2xl border cursor-pointer transition-all duration-200 ${
                       isSelected
-                        ? 'border-blue-500 bg-blue-900 bg-opacity-30'
-                        : 'border-slate-600 bg-slate-700 hover:border-slate-500'
+                        ? 'border-cyan-400/40 bg-cyan-400/10 shadow-lg shadow-cyan-500/10'
+                        : 'border-white/10 bg-white/5 hover:border-cyan-400/30 hover:bg-white/8'
                     } ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <div className="flex items-start gap-3">
@@ -265,7 +264,7 @@ export default function OnboardingPage() {
                         disabled={isDisabled}
                       />
                       <div className="flex-1">
-                        <div className="font-bold text-white text-base sm:text-lg mb-1">
+                        <div className="font-semibold text-white text-base sm:text-lg mb-1">
                           {model.label}
                         </div>
                         <div className="text-slate-400 text-xs sm:text-sm">
@@ -279,9 +278,9 @@ export default function OnboardingPage() {
             </div>
 
             {selectedModels.length > 0 && (
-              <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-green-900 bg-opacity-20 border border-green-700 rounded-lg">
-                <p className="text-green-400 font-semibold text-sm sm:text-base">
-                  ✅ {selectedModels.length} model(s) selected
+              <div className="mt-4 sm:mt-6 p-3 sm:p-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/10">
+                <p className="text-emerald-200 font-semibold text-sm sm:text-base">
+                  {selectedModels.length} model(s) selected
                 </p>
               </div>
             )}
@@ -290,15 +289,15 @@ export default function OnboardingPage() {
 
         {/* Review Selected Models (Steps 1-3) - Responsive */}
         {currentStep > 0 && (
-          <div className="bg-slate-800 rounded-lg p-4 sm:p-6 border border-slate-700 mb-6 sm:mb-8">
-            <h3 className="text-lg sm:text-xl font-bold text-white mb-3 sm:mb-4">
+          <div className="glass-panel rounded-[2rem] p-4 sm:p-6 border-white/10 mb-6 sm:mb-8">
+            <h3 className="text-lg sm:text-xl font-semibold text-white mb-3 sm:mb-4">
               Your Selected Models:
             </h3>
             <div className="space-y-2 sm:space-y-3">
               {selectedModels.map((model) => (
                 <div
                   key={model.id}
-                  className="flex items-center justify-between bg-slate-700 p-3 sm:p-4 rounded-lg gap-2"
+                  className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4 gap-2"
                 >
                   <div className="flex-1">
                     <div className="text-white font-semibold text-sm sm:text-base">
@@ -308,7 +307,7 @@ export default function OnboardingPage() {
                       {model.description}
                     </div>
                   </div>
-                  <div className="text-green-400 text-lg sm:text-xl">✓</div>
+                  <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">Ready</div>
                 </div>
               ))}
             </div>
@@ -320,34 +319,25 @@ export default function OnboardingPage() {
           <button
             onClick={handleBack}
             disabled={currentStep === 0}
-            className="w-full sm:w-auto px-6 sm:px-8 py-2 sm:py-3 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:opacity-50 text-white font-semibold rounded-lg transition text-sm sm:text-base"
+            className="w-full sm:w-auto px-6 sm:px-8 py-2.5 sm:py-3.5 rounded-2xl border border-white/10 bg-white/5 text-sm sm:text-base font-semibold text-white transition hover:bg-white/10 disabled:opacity-50"
           >
-            ← Back
+            Back
           </button>
 
           {currentStep < dialogues.length - 1 ? (
             <button
               onClick={handleNext}
-              className="w-full sm:w-auto px-6 sm:px-8 py-2 sm:py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition text-sm sm:text-base"
+              className="w-full sm:w-auto px-6 sm:px-8 py-2.5 sm:py-3.5 rounded-2xl bg-cyan-400 text-sm sm:text-base font-semibold text-slate-950 shadow-[0_20px_50px_rgba(34,211,238,0.18)] transition hover:bg-cyan-300"
             >
-              Next →
+              Next
             </button>
           ) : (
             <button
               onClick={handleComplete}
               disabled={loading || selectedModels.length === 0}
-              className="w-full sm:w-auto px-6 sm:px-8 py-2 sm:py-3 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 text-white font-semibold rounded-lg transition flex items-center justify-center gap-2 text-sm sm:text-base"
+              className="w-full sm:w-auto px-6 sm:px-8 py-2.5 sm:py-3.5 rounded-2xl bg-emerald-400 text-sm sm:text-base font-semibold text-slate-950 shadow-[0_20px_50px_rgba(16,185,129,0.18)] transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {loading ? (
-                <>
-                  <svg className="animate-spin h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  </svg>
-                  Saving...
-                </>
-              ) : (
-                '🚀 Start Comparing'
-              )}
+              {loading ? 'Saving...' : 'Start Comparing'}
             </button>
           )}
         </div>

@@ -18,19 +18,19 @@ export class AIService {
 
   async generateResponse(model: string, prompt: string): Promise<string> {
     try {
-      console.log('🚀 AIService: Generating response for model:', model);
+      console.log('AIService: Generating response for model:', model);
       const result = await this.groqService.makeRequest(model, prompt);
-      console.log('✅ AIService: Response generated successfully');
+      console.log('AIService: Response generated successfully');
       return result;
     } catch (error) {
-      console.error('💥 AIService Error:', error);
+      console.error('AIService Error:', error);
       // Return a user-friendly error message instead of throwing
       return `Sorry, ${model} is currently unavailable. Please try again. (${error instanceof Error ? error.message : 'Unknown error'})`;
     }
   }
 
   async compareModels(models: string[], prompt: string): Promise<ModelResponse[]> {
-    console.log('🔄 AIService: Starting model comparison for', models.length, 'models');
+    console.log('AIService: Starting model comparison for', models.length, 'models');
     
     const results = await Promise.allSettled(
       models.map(async (model) => {

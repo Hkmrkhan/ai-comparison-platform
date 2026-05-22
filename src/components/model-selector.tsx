@@ -8,19 +8,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 interface ModelSelectorProps {
   selectedModels: string[];
   onModelSelect: (modelId: string, checked: boolean) => void;
-  maxModels?: number; // ✅ Changed default to 3
+  maxModels?: number;
 }
 
 export function ModelSelector({ 
   selectedModels, 
   onModelSelect,
-  maxModels = 3  // ✅ CHANGED: 4 → 3
+  maxModels = 3
 }: ModelSelectorProps) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>Select AI Models</CardTitle>
-        {/* ✅ CHANGED: 2-4 models → 2-3 models */}
         <CardDescription>
           Choose which models to compare (select 2-3 models)
         </CardDescription>
@@ -54,8 +53,7 @@ export function ModelSelector({
         {selectedModels.length > 0 && (
           <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded">
             <p className="text-sm text-blue-800">
-              ✅ Selected: {selectedModels.length} model{selectedModels.length !== 1 ? 's' : ''}
-              {/* ✅ CHANGED: Maximum 3 */}
+              Selected: {selectedModels.length} model{selectedModels.length !== 1 ? 's' : ''}
               {selectedModels.length >= maxModels && ' (Maximum reached)'}
             </p>
           </div>

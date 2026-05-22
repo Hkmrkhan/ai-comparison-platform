@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { authenticatedFetch } from '@/lib/api-helpers';
@@ -110,6 +110,7 @@ interface PromptHistory {
 
 export default function ComparePage() {
   const router = useRouter();
+  const responseScrollRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [user, setUser] = useState<UserData | null>(null);
   const [selectedModels, setSelectedModels] = useState<Model[]>([]);
   const [apiKeys, setApiKeys] = useState<APIKeys>({});
@@ -214,10 +215,10 @@ export default function ComparePage() {
 
       if (response.ok) {
         await loadPromptHistory();
-        console.log('✅ History deleted successfully');
+        console.log('History deleted successfully');
       } else {
         const error = await response.json();
-        console.error('❌ Delete failed:', error);
+        console.error('Delete failed:', error);
         alert('Failed to delete history: ' + (error.error || 'Unknown error'));
       }
     } catch (error) {
@@ -236,7 +237,7 @@ export default function ComparePage() {
 
     if (!error) {
       setShowApiKeyModal(false);
-      alert('API Keys saved successfully! ✅');
+      alert('API Keys saved successfully!');
     }
   };
 
@@ -258,7 +259,7 @@ export default function ComparePage() {
 
     if (!error) {
       setShowAddModelsModal(false);
-      alert('Models updated successfully! ✅');
+      alert('Models updated successfully!');
     }
   };
 
@@ -346,6 +347,45 @@ export default function ComparePage() {
     setTimeout(() => setCopied(null), 2000);
   };
 
+  const bestResponseIndex = responses.reduce((bestIndex, response, index, array) => {
+    if (!response.success) {
+      return bestIndex;
+    }
+
+    if (bestIndex === -1) {
+      return index;
+    }
+
+    const currentBest = array[bestIndex];
+
+    if (!currentBest.success) {
+      return index;
+    }
+
+    if (response.wordCount !== currentBest.wordCount) {
+      return response.wordCount > currentBest.wordCount ? index : bestIndex;
+    }
+
+    if (response.time !== currentBest.time) {
+      return response.time < currentBest.time ? index : bestIndex;
+    }
+
+    return index < bestIndex ? index : bestIndex;
+  }, -1);
+
+  const scrollResponseCard = (index: number) => {
+    const responseElement = responseScrollRefs.current[index];
+
+    if (!responseElement) {
+      return;
+    }
+
+    responseElement.scrollTo({
+      top: responseElement.scrollHeight,
+      behavior: 'smooth',
+    });
+  };
+
   const getUniqueProviders = () => {
     const providers = new Set(selectedModels.map(m => m.provider));
     return Array.from(providers);
@@ -356,8 +396,10 @@ export default function ComparePage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900">
-        <div className="text-white">Loading...</div>
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
+        <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 backdrop-blur-xl">
+          Loading...
+        </div>
       </div>
     );
   }
@@ -365,57 +407,66 @@ export default function ComparePage() {
   const userName = user.user_metadata?.first_name || user.email?.split('@')[0] || 'User';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-3 sm:p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header - Responsive */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
-          <div>
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white">
-              AI Model Comparison
-            </h1>
-            <p className="text-slate-400 mt-1 sm:mt-2 text-sm sm:text-base">
-              Welcome, {userName}! 👋
-            </p>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="w-full sm:w-auto px-4 sm:px-6 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition text-sm sm:text-base"
-          >
-            Logout
-          </button>
-        </div>
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 p-3 text-white sm:p-6">
+      <div className="absolute inset-0 subtle-grid opacity-20" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.12),_transparent_34%),radial-gradient(circle_at_bottom_right,_rgba(168,85,247,0.14),_transparent_30%)]" />
 
-        {/* Action Buttons - Responsive */}
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-6">
-          <button
-            onClick={() => setShowAddModelsModal(true)}
-            className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition flex items-center justify-center gap-2 text-sm sm:text-base"
-          >
-            Add Models
-          </button>
-          <button
-            onClick={() => setShowApiKeyModal(true)}
-            className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition flex items-center justify-center gap-2 text-sm sm:text-base"
-          >
-            Manage API Keys
-          </button>
-          <button
-            onClick={() => setShowHistoryModal(true)}
-            className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition flex items-center justify-center gap-2 text-sm sm:text-base"
-          >
-            📜 History ({promptHistory.length})
-          </button>
+      <div className="relative max-w-7xl mx-auto">
+        {/* Header - Responsive */}
+        <div className="glass-panel mb-6 rounded-[2rem] p-4 sm:p-6 lg:p-7">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between xl:gap-6">
+            <div className="flex max-w-3xl items-start gap-3 sm:gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-400/10 text-lg font-semibold text-cyan-100 shadow-lg shadow-cyan-500/10">
+                AI
+              </div>
+              <div className="space-y-2">
+                <div className="inline-flex rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-100">
+                  Comparison workspace
+                </div>
+                <div className="space-y-2">
+                  <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl lg:text-5xl">
+                    AI Model Comparison
+                  </h1>
+                  <p className="max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
+                    Welcome, {userName}. Compare models, manage provider keys, and review saved history from one focused workspace.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-auto xl:grid-cols-4 xl:justify-end xl:pr-1">
+              <button
+                onClick={() => setShowAddModelsModal(true)}
+                className="h-12 w-full min-w-[10.5rem] rounded-2xl bg-cyan-400 px-4 text-sm sm:text-base font-semibold text-slate-950 shadow-[0_20px_50px_rgba(34,211,238,0.18)] transition hover:bg-cyan-300"
+              >
+                Add Models
+              </button>
+              <button
+                onClick={() => setShowApiKeyModal(true)}
+                className="h-12 w-full min-w-[10.5rem] rounded-2xl border border-white/10 bg-white/5 px-4 text-sm sm:text-base font-semibold text-white transition hover:bg-white/10"
+              >
+                Manage API Keys
+              </button>
+              <button
+                onClick={() => setShowHistoryModal(true)}
+                className="h-12 w-full min-w-[10.5rem] rounded-2xl border border-white/10 bg-white/5 px-4 text-sm sm:text-base font-semibold text-white transition hover:bg-white/10"
+              >
+                History ({promptHistory.length})
+              </button>
+              <button
+                onClick={handleLogout}
+                className="h-12 w-full min-w-[10.5rem] rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/15 px-4 text-sm sm:text-base font-semibold text-fuchsia-100 shadow-[0_18px_45px_rgba(217,70,239,0.14)] transition hover:bg-fuchsia-500/25 hover:text-white"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Selected Models - Responsive Grid */}
-        <div className="bg-slate-800 rounded-lg p-4 sm:p-6 mb-6 border border-slate-700">
-          <h3 className="text-lg sm:text-xl font-bold text-white mb-4">
-            Your Selected Models ({selectedModels.length})
-            {selectedModels.length > 0 && (
-              <span className="text-xs sm:text-sm font-normal text-slate-400 ml-2 sm:ml-3">
-                ({modelsWithApiKeys} with API keys)
-              </span>
-            )}
+        <div className="glass-panel rounded-[2rem] p-4 sm:p-6 mb-6">
+          <h3 className="text-lg sm:text-xl font-semibold text-white mb-4">
+            Your Selected Models
           </h3>
           {selectedModels.length === 0 ? (
             <p className="text-slate-400 text-sm sm:text-base">
@@ -426,7 +477,7 @@ export default function ComparePage() {
               {selectedModels.map((model) => (
                 <div
                   key={model.id}
-                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-slate-700 p-3 sm:p-4 rounded-lg gap-2"
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4 gap-2"
                 >
                   <div className="flex-1">
                     <div className="text-white font-semibold text-sm sm:text-base">
@@ -436,8 +487,8 @@ export default function ComparePage() {
                       {model.description}
                     </div>
                   </div>
-                  <div className={`text-xs sm:text-sm font-semibold ${apiKeys[model.provider] ? 'text-green-400' : 'text-red-400'}`}>
-                    {apiKeys[model.provider] ? '✓ API Key Set' : '✗ No API Key'}
+                  <div className={`rounded-full px-3 py-1 text-xs sm:text-sm font-semibold ${apiKeys[model.provider] ? 'bg-emerald-400/10 text-emerald-200 border border-emerald-400/20' : 'bg-rose-400/10 text-rose-200 border border-rose-400/20'}`}>
+                    {apiKeys[model.provider] ? 'API Key Set' : 'No API Key'}
                   </div>
                 </div>
               ))}
@@ -446,7 +497,7 @@ export default function ComparePage() {
         </div>
 
         {/* Prompt Input - Responsive */}
-        <div className="bg-slate-800 rounded-lg p-4 sm:p-6 mb-6 border border-slate-700">
+        <div className="glass-panel rounded-[2rem] p-4 sm:p-6 mb-6">
           <label className="block text-white font-semibold mb-3 text-sm sm:text-base">
             Enter Your Prompt:
           </label>
@@ -454,32 +505,15 @@ export default function ComparePage() {
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="Type your question or prompt here..."
-            className="w-full h-24 sm:h-32 bg-slate-700 border border-slate-600 rounded-lg px-3 sm:px-4 py-2 sm:py-3 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm sm:text-base"
+            className="w-full h-28 sm:h-40 rounded-3xl border border-white/10 bg-slate-950/50 px-4 sm:px-5 py-3 sm:py-4 text-sm sm:text-base text-white placeholder:text-slate-500 focus:border-cyan-400/40 focus:outline-none focus:ring-4 focus:ring-cyan-400/10"
           />
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mt-4">
             <button
               onClick={handleCompare}
               disabled={loading || !prompt.trim() || modelsWithApiKeys === 0}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold py-2 sm:py-3 px-4 sm:px-6 rounded-lg flex items-center justify-center gap-2 text-sm sm:text-base"
+              className="flex-1 rounded-2xl bg-cyan-400 px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-semibold text-slate-950 shadow-[0_20px_50px_rgba(34,211,238,0.18)] transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
             >
-              {loading ? (
-                <>
-                  <svg className="animate-spin h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 24 24">
-                    <circle
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                      fill="none"
-                      strokeDasharray="60"
-                    />
-                  </svg>
-                  Comparing...
-                </>
-              ) : (
-                '⚡ Compare Models'
-              )}
+              {loading ? 'Comparing...' : 'Compare Models'}
             </button>
             {prompt && (
               <button
@@ -487,14 +521,14 @@ export default function ComparePage() {
                   setPrompt('');
                   setResponses([]);
                 }}
-                className="sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg text-sm sm:text-base"
+                className="sm:w-auto rounded-2xl border border-white/10 bg-white/5 px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-semibold text-white transition hover:bg-white/10"
               >
                 Cancel
               </button>
             )}
           </div>
           {modelsWithApiKeys === 0 && selectedModels.length > 0 && (
-            <p className="text-yellow-400 text-xs sm:text-sm mt-3">
+            <p className="text-amber-200 text-xs sm:text-sm mt-3">
               ⚠️ Please add API keys for at least one model to start comparison
             </p>
           )}
@@ -502,42 +536,63 @@ export default function ComparePage() {
 
         {/* Results - Responsive */}
         {responses.length > 0 && (
-          <div className="space-y-4">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(18rem,1fr))] gap-4">
             {responses.map((response, idx) => (
               <div
                 key={idx}
-                className={`bg-slate-800 rounded-lg p-4 sm:p-6 border-2 ${
-                  response.success ? 'border-green-700' : 'border-red-700'
+                onClick={() => scrollResponseCard(idx)}
+                className={`flex h-[30rem] min-h-[30rem] w-full cursor-pointer flex-col overflow-hidden rounded-[2rem] border p-4 sm:p-5 transition-all duration-300 ${
+                  idx === bestResponseIndex
+                    ? 'border-amber-300/60 bg-[linear-gradient(180deg,rgba(251,191,36,0.16),rgba(15,23,42,0.88))] shadow-[0_30px_90px_rgba(251,191,36,0.16)] ring-1 ring-amber-300/30 md:scale-[1.01]'
+                    : response.success
+                      ? 'border-emerald-400/20 bg-white/5'
+                      : 'border-rose-400/20 bg-white/5'
                 }`}
               >
-                <div className="flex flex-col sm:flex-row justify-between items-start gap-3 sm:gap-4 mb-4">
+                {idx === bestResponseIndex && (
+                  <div className="mb-3 inline-flex w-fit rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-100">
+                    Best response
+                  </div>
+                )}
+                <div className="mb-4 flex items-start justify-between gap-3">
                   <div>
-                    <h3 className="text-lg sm:text-xl font-bold text-white">
+                    <h3 className="text-lg sm:text-xl font-semibold text-white">
                       {response.model}
                     </h3>
-                    <p className="text-xs sm:text-sm text-slate-400">
-                      {response.provider}
-                    </p>
                   </div>
                   <button
-                    onClick={() => handleCopy(response.response, `response-${idx}`)}
-                    className={`w-full sm:w-auto px-3 sm:px-4 py-2 rounded-lg transition text-sm ${
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleCopy(response.response, `response-${idx}`);
+                    }}
+                    className={`w-full sm:w-auto rounded-2xl px-3 sm:px-4 py-2 text-sm transition ${
                       copied === `response-${idx}`
-                        ? 'bg-green-600 text-white'
-                        : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                        ? 'bg-emerald-400 text-slate-950'
+                        : 'border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10'
                     }`}
                   >
-                    {copied === `response-${idx}` ? '✓ Copied!' : ' Copy'}
+                    {copied === `response-${idx}` ? 'Copied!' : 'Copy'}
                   </button>
                 </div>
-                <p className="text-slate-300 mb-4 leading-relaxed whitespace-pre-wrap text-sm sm:text-base break-words">
-                  {response.response}
-                </p>
-                <div className="flex flex-wrap gap-3 sm:gap-6 text-xs sm:text-sm text-slate-400">
-                  <span> {response.time}ms</span>
-                  <span> {response.wordCount} words</span>
-                  <span className={response.success ? 'text-green-400' : 'text-red-400'}>
-                    {response.success ? '✓ Success' : '✗ Failed'}
+                <div
+                  ref={(element) => {
+                    responseScrollRefs.current[idx] = element;
+                  }}
+                  className={`flex-1 overflow-y-auto rounded-2xl border p-4 text-sm leading-7 sm:text-base ${
+                    idx === bestResponseIndex
+                      ? 'border-amber-300/20 bg-slate-950/55 text-amber-50'
+                      : 'border-white/10 bg-slate-950/40 text-slate-200'
+                  }`}
+                >
+                  <p className="whitespace-pre-wrap break-words">
+                    {response.response}
+                  </p>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3 text-xs sm:text-sm text-slate-400">
+                  <span>{response.time}ms</span>
+                  <span>{response.wordCount} words</span>
+                  <span className={idx === bestResponseIndex ? 'text-amber-200' : response.success ? 'text-emerald-300' : 'text-rose-300'}>
+                    {idx === bestResponseIndex ? 'Top response' : response.success ? 'Success' : 'Failed'}
                   </span>
                 </div>
               </div>
@@ -548,9 +603,9 @@ export default function ComparePage() {
 
       {/* Add Models Modal - Responsive */}
       {showAddModelsModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-lg p-4 sm:p-8 max-w-4xl w-full mx-4 border border-slate-700 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+          <div className="glass-panel max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-[2rem] border-white/10 p-4 sm:p-8">
+            <h2 className="text-xl sm:text-2xl font-semibold text-white mb-4 sm:mb-6">
               Add Models ({selectedModels.length}/7)
             </h2>
             
@@ -563,10 +618,10 @@ export default function ComparePage() {
                   <div
                     key={model.id}
                     onClick={() => !isDisabled && toggleModelSelection(model)}
-                    className={`p-3 sm:p-4 rounded-lg border-2 cursor-pointer transition ${
+                    className={`p-3 sm:p-4 rounded-2xl border cursor-pointer transition-all duration-200 ${
                       isSelected
-                        ? 'border-blue-500 bg-blue-900 bg-opacity-30'
-                        : 'border-slate-600 bg-slate-700 hover:border-slate-500'
+                        ? 'border-cyan-400/40 bg-cyan-400/10'
+                        : 'border-white/10 bg-white/5 hover:border-cyan-400/30 hover:bg-white/8'
                     } ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <div className="flex items-start gap-3">
@@ -578,7 +633,7 @@ export default function ComparePage() {
                         disabled={isDisabled}
                       />
                       <div className="flex-1">
-                        <div className="font-bold text-white text-base sm:text-lg mb-1">
+                        <div className="font-semibold text-white text-base sm:text-lg mb-1">
                           {model.label}
                         </div>
                         <div className="text-slate-400 text-xs sm:text-sm">
@@ -595,13 +650,13 @@ export default function ComparePage() {
               <button
                 onClick={handleSaveSelectedModels}
                 disabled={selectedModels.length < 2}
-                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold py-2 sm:py-3 rounded-lg text-sm sm:text-base"
+                className="flex-1 rounded-2xl bg-cyan-400 py-2.5 sm:py-3 text-sm sm:text-base font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
               >
                 Save Selected Models {selectedModels.length < 2 && `(${selectedModels.length}/2 minimum)`}
               </button>
               <button
                 onClick={() => setShowAddModelsModal(false)}
-                className="sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg text-sm sm:text-base"
+                className="sm:w-auto rounded-2xl border border-white/10 bg-white/5 px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-semibold text-white transition hover:bg-white/10"
               >
                 Cancel
               </button>
@@ -612,10 +667,10 @@ export default function ComparePage() {
 
       {/* API Key Modal - Responsive */}
       {showApiKeyModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-lg p-4 sm:p-8 max-w-2xl w-full mx-4 border border-slate-700 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6">
-               Manage API Keys
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+          <div className="glass-panel max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] border-white/10 p-4 sm:p-8">
+            <h2 className="text-xl sm:text-2xl font-semibold text-white mb-4 sm:mb-6">
+              Manage API Keys
             </h2>
             
             <div className="space-y-3 sm:space-y-4 mb-4 sm:mb-6">
@@ -631,14 +686,14 @@ export default function ComparePage() {
                       setApiKeys({ ...apiKeys, [provider]: e.target.value })
                     }
                     placeholder={`Enter your ${provider} API key`}
-                    className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm sm:text-base"
+                    className="w-full rounded-2xl border border-white/10 bg-slate-950/50 px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base text-white placeholder:text-slate-500 focus:border-cyan-400/40 focus:outline-none focus:ring-4 focus:ring-cyan-400/10"
                   />
                 </div>
               ))}
             </div>
 
-            <div className="bg-yellow-900 border border-yellow-700 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6">
-              <p className="text-yellow-100 text-xs sm:text-sm">
+            <div className="mb-4 sm:mb-6 rounded-2xl border border-amber-400/20 bg-amber-400/10 p-3 sm:p-4">
+              <p className="text-amber-100 text-xs sm:text-sm">
                 <strong>Security:</strong> Your API keys are stored securely in our database and only accessible by you.
               </p>
             </div>
@@ -647,13 +702,13 @@ export default function ComparePage() {
               <button
                 onClick={handleSaveApiKeys}
                 disabled={Object.values(apiKeys).every(key => !key || key.trim() === '')}
-                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold py-2 sm:py-3 rounded-lg text-sm sm:text-base"
+                className="flex-1 rounded-2xl bg-cyan-400 py-2.5 sm:py-3 text-sm sm:text-base font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
               >
                 Save API Keys
               </button>
               <button
                 onClick={() => setShowApiKeyModal(false)}
-                className="sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg text-sm sm:text-base"
+                className="sm:w-auto rounded-2xl border border-white/10 bg-white/5 px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-semibold text-white transition hover:bg-white/10"
               >
                 Cancel
               </button>
@@ -664,10 +719,10 @@ export default function ComparePage() {
 
       {/* History Modal - Responsive */}
       {showHistoryModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-lg p-4 sm:p-8 max-w-4xl w-full mx-4 border border-slate-700 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6">
-              📜 Prompt History ({promptHistory.length})
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+          <div className="glass-panel max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-[2rem] border-white/10 p-4 sm:p-8">
+            <h2 className="text-xl sm:text-2xl font-semibold text-white mb-4 sm:mb-6">
+              Prompt History ({promptHistory.length})
             </h2>
             
             {loadingHistory ? (
@@ -685,7 +740,7 @@ export default function ComparePage() {
                 {promptHistory.map((item) => (
                   <div
                     key={item.id}
-                    className="p-3 sm:p-4 rounded-lg bg-slate-700 hover:bg-slate-650 border border-slate-600 transition"
+                    className="rounded-2xl border border-white/10 bg-white/5 p-3 sm:p-4 transition hover:bg-white/8"
                   >
                     <div className="flex flex-col sm:flex-row justify-between items-start gap-3 mb-3">
                       <div className="flex-1">
@@ -699,9 +754,9 @@ export default function ComparePage() {
                       <div className="flex gap-2 w-full sm:w-auto">
                         <button
                           onClick={() => loadHistoryItem(item)}
-                          className="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs sm:text-sm font-semibold transition"
+                          className="flex-1 sm:flex-none rounded-2xl bg-cyan-400 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
                         >
-                          📂 Load
+                          Load
                         </button>
                         <button
                           onClick={() => {
@@ -709,9 +764,9 @@ export default function ComparePage() {
                               deleteHistoryItem(item.id);
                             }
                           }}
-                          className="px-3 sm:px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs sm:text-sm font-semibold transition"
+                          className="px-3 sm:px-4 py-2 rounded-2xl border border-white/10 bg-white/5 text-xs sm:text-sm font-semibold text-white transition hover:bg-white/10"
                         >
-                          🗑️
+                          Delete
                         </button>
                       </div>
                     </div>
@@ -723,8 +778,8 @@ export default function ComparePage() {
                         {item.responses.map((resp, idx) => (
                           <span
                             key={idx}
-                            className={`text-xs px-2 py-1 rounded ${
-                              resp.success ? 'bg-green-900 text-green-200' : 'bg-red-900 text-red-200'
+                            className={`text-xs px-2 py-1 rounded-full ${
+                              resp.success ? 'bg-emerald-400/10 text-emerald-200 border border-emerald-400/20' : 'bg-rose-400/10 text-rose-200 border border-rose-400/20'
                             }`}
                           >
                             {resp.model} ({resp.time}ms)
@@ -740,7 +795,7 @@ export default function ComparePage() {
             <div className="flex justify-end">
               <button
                 onClick={() => setShowHistoryModal(false)}
-                className="px-4 sm:px-6 py-2 sm:py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg text-sm sm:text-base"
+                className="rounded-2xl border border-white/10 bg-white/5 px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-semibold text-white transition hover:bg-white/10"
               >
                 Close
               </button>
